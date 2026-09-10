@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Panda Mandarin 3D - Multi Level Pinyin</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; font-family: 'Comic Sans MS', 'Chalkboard SE', 'Fredoka', sans-serif; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #000; }
+        
+        #game-container { width: 100%; height: 100%; position: relative; }
+        canvas { width: 100%; height: 100%; display: block; }
+
+        .ui-panel { position: absolute; z-index: 10; pointer-events: none; }
+        .interactive { pointer-events: auto; }
+
+        /* QUEST BANNER */
+        #quest-banner {
+            top: 15px; left: 50%; transform: translateX(-50%);
+            background: linear-gradient(135deg, #FF9800, #F57C00);
+            border: 4px solid #FFF; border-radius: 20px;
+            padding: 10px 25px; color: white; text-align: center;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3); min-width: 320px;
+        }
+        #quest-banner h2 { font-size: 1rem; text-shadow: 1px 1px 2px #000; color: #FFE082; }
+        #quest-banner h1 { font-size: 1.4rem; color: #FFF; margin: 2px 0; }
+        #quest-banner p { font-size: 0.85rem; background: rgba(0,0,0,0.2); padding: 3px 10px; border-radius: 10px; }
+
+        /* STATS */
+        #stats-panel { top: 15px; left: 15px; display: flex; gap: 10px; }
+        .stat-box {
+            background: rgba(255, 255, 255, 0.9); border: 3px solid #4CAF50;
+            border-radius: 15px; padding: 5px 15px; font-weight: bold; color: #2E7D32;
+            display: flex; align-items: center; gap: 5px; font-size: 1.1rem;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        /* MINI-MAP */
+        #minimap-container {
+            top: 15px; right: 15px; width: 110px; height: 110px;
+            background: rgba(255, 255, 255, 0.85); border: 4px solid #2196F3;
+            border-radius: 50%; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        #minimap-canvas { width: 100%; height: 100%; }
+
+        /* INTERACTION PROMPT */
+        #action-prompt {
+            bottom: 120px; left: 50%; transform: translateX(-50%);
+            background: #FFEB3B; color: #333; border: 3px solid #F57F17;
+            padding: 12px 30px; border-radius: 30px; font-size: 1.2rem; font-weight: bold;
+            box-shadow: 0 6px 0 #F57F17, 0 10px 20px rgba(0,0,0,0.2);
+            display: none; animation: bounce 0.6s infinite alternate;
+        }
+        @keyframes bounce { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-10px); } }
+
+        #controls-hint {
+            bottom: 15px; left: 15px; background: rgba(0,0,0,0.6); color: white;
+            padding: 8px 15px; border-radius: 10px; font-size: 0.85rem;
+        }
+        
+        #btn-interact {
+            bottom: 30px; right: 30px; width: 80px; height: 80px;
+            background: linear-gradient(135deg, #4CAF50, #2E7D32); border: 4px solid #FFF;
+            border-radius: 50%; color: white; font-weight: bold; font-size: 1rem;
+            box-shadow: 0 6px 0 #1B5E20, 0 10px 15px rgba(0,0,0,0.3);
+            display: flex; justify-content: center; align-items: center; text-align: center;
+            cursor: pointer;
+        }
+        #btn-interact:active { transform: translateY(4px); box-shadow: 0 2px 0 #1B5E20; }
+
+        /* MODALS */
+        .modal {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); z-index: 100; display: none;
+            justify-content: center; align-items: center; pointer-events: auto;
+        }
+        .modal-card {
+            background: white; border-radius: 25px; padding: 25px; width: 90%; max-width: 400px;
+            text-align: center; border: 6px solid #4CAF50; box-shadow: 0 15px 30px rgba(0,0,0,0.4);
+            animation: popIn 0.3s ease-out;
+        }
+        @keyframes popIn { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .modal-card.wrong { border-color: #FF5252; }
+        .modal-title { font-size: 2rem; color: #2E7D32; margin-bottom: 10px; }
+        .modal-card.wrong .modal-title { color: #D32F2F; }
+        .modal-emoji { font-size: 4rem; margin: 10px 0; }
+        .modal-pinyin { font-size: 2.2rem; font-weight: bold; color: #333; }
+        .modal-meaning { font-size: 1.2rem; color: #666; margin-bottom: 15px; }
+        
+        .btn-modal {
+            background: #2196F3; color: white; border: none; padding: 12px 30px;
+            font-size: 1.2rem; font-weight: bold; border-radius: 25px; cursor: pointer;
+            box-shadow: 0 5px 0 #0D47A1; transition: 0.1s;
+        }
+        .btn-modal:active { transform: translateY(3px); box-shadow: 0 2px 0 #0D47A1; }
+        .btn-audio { background: #FF9800; box-shadow: 0 5px 0 #E65100; margin-right: 10px; }
+
+        #joystick-zone { position: absolute; bottom: 20px; left: 20px; width: 120px; height: 120px; z-index: 20; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.9.0/nipplejs.min.js"></script>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="stats-panel" class="ui-panel">
+            <div class="stat-box">🏆 <span id="level-display">LEVEL 1</span></div>
+            <div class="stat-box">⭐ <span id="star-count">0</span></div>
+            <div class="stat-box">⚡ <span id="xp-count">0</span> XP</div>
+        </div>
+
+        <div id="quest-banner" class="ui-panel">
+            <h2 id="category-title">🎯 LEVEL 1: BUAH-BUAHAN</h2>
+            <h1 id="quest-title">Buka peti untuk ambil pinyin!</h1>
+            <p id="quest-desc">📍 Cari peti dan bawa pinyin ke gambar yang betul</p>
+        </div>
+
+        <div id="minimap-container" class="ui-panel">
+            <canvas id="minimap-canvas" width="110" height="110"></canvas>
+        </div>
+
+        <div id="action-prompt" class="ui-panel">[E] BUKA PETI</div>
+
+        <div id="controls-hint" class="ui-panel">WASD / Anak Panah = Jalan | [E] Interaksi</div>
+
+        <div id="btn-interact" class="ui-panel interactive">TEKAN<br>[E]</div>
+
+        <div id="joystick-zone"></div>
+
+        <!-- MODALS -->
+        <div id="modal-success" class="modal">
+            <div class="modal-card">
+                <div class="modal-title">🎉 BETUL!</div>
+                <div id="success-emoji" class="modal-emoji">🍎</div>
+                <div id="success-pinyin" class="modal-pinyin">píng guǒ</div>
+                <div id="success-meaning" class="modal-meaning">bermaksud **Epal**</div>
+                <button class="btn-modal btn-audio interactive" onclick="playAudio()">🔊 DENGAR</button>
+                <button class="btn-modal interactive" onclick="closeSuccessModal()">TERUSKAN ➔</button>
+            </div>
+        </div>
+
+        <div id="modal-wrong" class="modal">
+            <div class="modal-card wrong">
+                <div class="modal-title">Cuba Lagi!</div>
+                <div class="modal-emoji">💡</div>
+                <div id="wrong-text" class="modal-meaning" style="font-size:1.1rem; margin:15px 0;">
+                    Ini bukan padanan yang betul.
+                </div>
+                <button class="btn-modal interactive" style="background:#FF5252; box-shadow:0 5px 0 #B71C1C;" onclick="closeWrongModal()">FAHAM</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DATA TAHAP PERMAINAN (PINYIN TAMPILAN + HANZI UTK AUDIO)
+        const gameLevels = [
+            {
+                category: "LEVEL 1: BUAH-BUAHAN",
+                words: [
+                    { pinyin: "píng guǒ", hanzi: "苹果", meaning: "Epal", emoji: "🍎" },
+                    { pinyin: "xiāng jiāo", hanzi: "香蕉", meaning: "Pisang", emoji: "🍌" },
+                    { pinyin: "xī guā", hanzi: "西瓜", meaning: "Tembikai", emoji: "🍉" },
+                    { pinyin: "chéng zi", hanzi: "橙子", meaning: "Oren", emoji: "🍊" }
+                ]
+            },
+            {
+                category: "LEVEL 2: MAKANAN",
+                words: [
+                    { pinyin: "mǐ fàn", hanzi: "米饭", meaning: "Nasi", emoji: "🍚" },
+                    { pinyin: "miàn tiáo", hanzi: "面条", meaning: "Mee", emoji: "🍜" },
+                    { pinyin: "miàn bāo", hanzi: "面包", meaning: "Roti", emoji: "🍞" },
+                    { pinyin: "jī dàn", hanzi: "鸡蛋", meaning: "Telur", emoji: "🥚" }
+                ]
+            },
+            {
+                category: "LEVEL 3: KELUARGA",
+                words: [
+                    { pinyin: "bà ba", hanzi: "爸爸", meaning: "Bapa", emoji: "👨" },
+                    { pinyin: "mā ma", hanzi: "妈妈", meaning: "Ibu", emoji: "👩" },
+                    { pinyin: "gē ge", hanzi: "哥哥", meaning: "Abang", emoji: "👦" },
+                    { pinyin: "jiě jie", hanzi: "姐姐", meaning: "Kakak", emoji: "👧" }
+                ]
+            },
+            {
+                category: "LEVEL 4: TEMPAT DI SEKOLAH",
+                words: [
+                    { pinyin: "jiào shì", hanzi: "教室", meaning: "Bilik Darjah", emoji: "🏫" },
+                    { pinyin: "shí táng", hanzi: "食堂", meaning: "Kantin", emoji: "🍱" },
+                    { pinyin: "cāo chǎng", hanzi: "操场", meaning: "Padang", emoji: "⚽" },
+                    { pinyin: "tú shū shì", hanzi: "图书室", meaning: "Perpustakaan", emoji: "📚" }
+                ]
+            },
+            {
+                category: "LEVEL 5: KENDERAAN",
+                words: [
+                    { pinyin: "qì chē", hanzi: "汽车", meaning: "Kereta", emoji: "🚗" },
+                    { pinyin: "gōng jiāo chē", hanzi: "公交车", meaning: "Bas", emoji: "🚌" },
+                    { pinyin: "zì xíng chē", hanzi: "自行车", meaning: "Basikal", emoji: "🚲" },
+                    { pinyin: "fēi jī", hanzi: "飞机", meaning: "Kapal Terbang", emoji: "✈️" }
+                ]
+            },
+            {
+                category: "LEVEL 6: PEKERJAAN",
+                words: [
+                    { pinyin: "lǎo shī", hanzi: "老师", meaning: "Guru", emoji: "👩‍🏫" },
+                    { pinyin: "yī shēng", hanzi: "医生", meaning: "Doktor", emoji: "👨‍⚕️" },
+                    { pinyin: "jǐng chá", hanzi: "警察", meaning: "Polis", emoji: "👮" },
+                    { pinyin: "chú shī", hanzi: "厨师", meaning: "Tukang Masak", emoji: "👨‍🍳" }
+                ]
+            }
+        ];
+
+        let currentLevelIdx = 0;
+        let completedInLevel = 0;
+        let hasCard = false;
+        let currentCarriedWord = null;
+        let stars = 0;
+        let xp = 0;
+
+        // THREE.JS SETUP
+        const container = document.getElementById('game-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 20, 50);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(20, 40, 20);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // PADANG & SEKOLAH
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshLambertMaterial({ color: 0x81C784 }));
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        const school = new THREE.Mesh(new THREE.BoxGeometry(30, 8, 10), new THREE.MeshLambertMaterial({ color: 0xFFEB3B }));
+        school.position.set(0, 4, -20);
+        scene.add(school);
+
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(22, 4, 4), new THREE.MeshLambertMaterial({ color: 0xD32F2F }));
+        roof.position.set(0, 10, -20);
+        roof.rotation.y = Math.PI / 4;
+        scene.add(roof);
+
+        // PANDA CHARACTER (DETAILED 3D MODEL)
+        const pandaGroup = new THREE.Group();
+        const whiteMat = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+        const blackMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+
+        const pandaBody = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.7, 1.2, 16), whiteMat);
+        pandaBody.position.y = 0.8; pandaGroup.add(pandaBody);
+
+        const chestPattern = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.65, 0.4, 16), blackMat);
+        chestPattern.position.y = 1.1; pandaGroup.add(chestPattern);
+
+        const pandaHead = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 16), whiteMat);
+        pandaHead.position.y = 1.75; pandaGroup.add(pandaHead);
+
+        const earGeo = new THREE.SphereGeometry(0.18, 8, 8);
+        const earL = new THREE.Mesh(earGeo, blackMat); earL.position.set(-0.4, 2.2, 0);
+        const earR = new THREE.Mesh(earGeo, blackMat); earR.position.set(0.4, 2.2, 0);
+        pandaGroup.add(earL); pandaGroup.add(earR);
+
+        const eyeSpotGeo = new THREE.BoxGeometry(0.18, 0.12, 0.05);
+        const eyeL = new THREE.Mesh(eyeSpotGeo, blackMat); eyeL.position.set(-0.2, 1.8, 0.5); eyeL.rotation.z = -0.2;
+        const eyeR = new THREE.Mesh(eyeSpotGeo, blackMat); eyeR.position.set(0.2, 1.8, 0.5); eyeR.rotation.z = 0.2;
+        const nose = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), blackMat); nose.position.set(0, 1.68, 0.54);
+        pandaGroup.add(eyeL); pandaGroup.add(eyeR); pandaGroup.add(nose);
+
+        const armGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.7);
+        const armL = new THREE.Mesh(armGeo, blackMat); armL.position.set(-0.65, 1.0, 0); armL.rotation.z = 0.3;
+        const armR = new THREE.Mesh(armGeo, blackMat); armR.position.set(0.65, 1.0, 0); armR.rotation.z = -0.3;
+        pandaGroup.add(armL); pandaGroup.add(armR);
+
+        const legGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.5);
+        const legL = new THREE.Mesh(legGeo, blackMat); legL.position.set(-0.3, 0.25, 0);
+        const legR = new THREE.Mesh(legGeo, blackMat); legR.position.set(0.3, 0.25, 0);
+        pandaGroup.add(legL); pandaGroup.add(legR);
+
+        pandaGroup.position.set(0, 0, 5);
+        scene.add(pandaGroup);
+
+        // KAD YANG DIPEGANG PANDA
+        let carriedCardMesh;
+        function setupCarriedCardMesh() {
+            const cardGeo = new THREE.BoxGeometry(0.8, 1, 0.05);
+            const matBack = new THREE.MeshLambertMaterial({ color: 0xFFEB3B });
+            carriedCardMesh = new THREE.Mesh(cardGeo, [matBack, matBack, matBack, matBack, matBack, matBack]);
+            carriedCardMesh.position.set(0, 1.2, 0.65);
+            carriedCardMesh.visible = false;
+            pandaGroup.add(carriedCardMesh);
+        }
+        setupCarriedCardMesh();
+
+        function createTextTexture(text) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, 256, 256);
+            ctx.lineWidth = 12; ctx.strokeStyle = "#FF9800"; ctx.strokeRect(0,0,256,256);
+            ctx.fillStyle = "#000000"; 
+            
+            // Laras saiz teks mengikut panjang Pinyin
+            if (text.length > 8) {
+                ctx.font = "bold 35px sans-serif";
+            } else if (text.length > 5) {
+                ctx.font = "bold 45px sans-serif";
+            } else {
+                ctx.font = "bold 55px sans-serif";
+            }
+            
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText(text, 128, 128);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createEmojiTexture(emoji, isTick = false) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = "#FFF8E1"; ctx.fillRect(0, 0, 256, 256);
+            ctx.lineWidth = 10; ctx.strokeStyle = "#8D6E63"; ctx.strokeRect(0,0,256,256);
+            ctx.font = "120px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText(emoji, 128, 135);
+            
+            if (isTick) {
+                ctx.fillStyle = "#4CAF50"; ctx.font = "bold 100px sans-serif";
+                ctx.fillText("✅", 200, 60);
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // PETI & POST GAMBAR
+        const chests = [];
+        const chestPositions = [-12, -4, 4, 12];
+        const targetBoards = [];
+        const postPositions = [-9, -3, 3, 9];
+
+        function initObjects() {
+            for (let i = 0; i < 4; i++) {
+                const chestGroup = new THREE.Group();
+                const baseGeo = new THREE.BoxGeometry(1.4, 0.8, 1.0);
+                const chestMat = new THREE.MeshLambertMaterial({ color: 0x8D6E63 });
+                const goldMat = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
+                const base = new THREE.Mesh(baseGeo, chestMat);
+                base.position.y = 0.4;
+                chestGroup.add(base);
+
+                const lidGroup = new THREE.Group();
+                lidGroup.position.set(0, 0.8, -0.5);
+                const lid = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.3, 1.02), goldMat);
+                lid.position.set(0, 0.15, 0.5);
+                lidGroup.add(lid);
+                chestGroup.add(lidGroup);
+
+                const cardGeo = new THREE.BoxGeometry(0.8, 1.0, 0.05);
+                const matBack = new THREE.MeshLambertMaterial({ color: 0xFFEB3B });
+                const cardMesh = new THREE.Mesh(cardGeo, [matBack, matBack, matBack, matBack, matBack, matBack]);
+                cardMesh.position.set(0, 0.8, 0);
+                cardMesh.visible = false;
+                chestGroup.add(cardMesh);
+
+                chestGroup.position.set(chestPositions[i], 0, 0);
+                scene.add(chestGroup);
+                chests.push({ group: chestGroup, lidGroup: lidGroup, cardMesh: cardMesh, userData: {} });
+            }
+
+            for (let i = 0; i < 4; i++) {
+                const boardGroup = new THREE.Group();
+                const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.5), new THREE.MeshLambertMaterial({color: 0x555}));
+                stand.position.y = 0.75; boardGroup.add(stand);
+
+                const boardGeo = new THREE.BoxGeometry(1.8, 1.8, 0.1);
+                const matWood = new THREE.MeshLambertMaterial({ color: 0x8D6E63 });
+                const boardMesh = new THREE.Mesh(boardGeo, [matWood, matWood, matWood, matWood, matWood, matWood]);
+                boardMesh.position.y = 2; boardGroup.add(boardMesh);
+
+                boardGroup.position.set(postPositions[i], 0, -10);
+                scene.add(boardGroup);
+                targetBoards.push({ group: boardGroup, boardMesh: boardMesh, userData: {} });
+            }
+        }
+
+        initObjects();
+
+        function loadLevel(levelIdx) {
+            const levelData = gameLevels[levelIdx];
+            completedInLevel = 0;
+            hasCard = false;
+            carriedCardMesh.visible = false;
+
+            document.getElementById('level-display').innerText = `LEVEL ${levelIdx + 1}`;
+            document.getElementById('category-title').innerText = `🎯 ${levelData.category}`;
+            document.getElementById('quest-title').innerText = `Buka peti untuk ambil pinyin!`;
+            document.getElementById('quest-desc').innerText = `📍 Cari peti dan bawa pinyin ke gambar yang betul`;
+
+            const shuffledWords = [...levelData.words].sort(() => 0.5 - Math.random());
+            const shuffledPosts = [...levelData.words].sort(() => 0.5 - Math.random());
+
+            chests.forEach((c, idx) => {
+                c.lidGroup.rotation.x = 0;
+                c.cardMesh.visible = true;
+                
+                const wordObj = shuffledWords[idx];
+                const matFront = new THREE.MeshBasicMaterial({ map: createTextTexture(wordObj.pinyin) });
+                const matBack = new THREE.MeshLambertMaterial({ color: 0xFFEB3B });
+                c.cardMesh.material = [matBack, matBack, matBack, matBack, matFront, matBack];
+                
+                c.userData = { wordData: wordObj, isOpen: false, isTaken: false };
+            });
+
+            targetBoards.forEach((b, idx) => {
+                const wordObj = shuffledPosts[idx];
+                const matEmoji = new THREE.MeshBasicMaterial({ map: createEmojiTexture(wordObj.emoji, false) });
+                const matWood = new THREE.MeshLambertMaterial({ color: 0x8D6E63 });
+                b.boardMesh.material = [matWood, matWood, matWood, matWood, matEmoji, matWood];
+
+                b.userData = { wordData: wordObj, isCompleted: false };
+            });
+        }
+
+        loadLevel(currentLevelIdx);
+
+        // CONTROLS & JOYSTICK
+        const keys = {};
+        window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+        let moveVector = { x: 0, z: 0 };
+        const manager = nipplejs.create({ zone: document.getElementById('joystick-zone'), mode: 'static', position: { left: '60px', bottom: '60px' }, size: 100 });
+        manager.on('move', (evt, data) => { if (data.vector) { moveVector.x = data.vector.x; moveVector.z = -data.vector.y; } });
+        manager.on('end', () => { moveVector.x = 0; moveVector.z = 0; });
+
+        // INTERACTION LOGIC
+        const actionPrompt = document.getElementById('action-prompt');
+        const btnInteract = document.getElementById('btn-interact');
+
+        function checkInteractions() {
+            if (!hasCard) {
+                for (let c of chests) {
+                    const dist = pandaGroup.position.distanceTo(c.group.position);
+                    if (dist < 2.2) {
+                        if (!c.userData.isOpen) {
+                            actionPrompt.innerText = "[E] BUKA PETI";
+                            actionPrompt.style.display = "block";
+                            return { type: "OPEN_CHEST", chest: c };
+                        } else if (!c.userData.isTaken) {
+                            actionPrompt.innerText = "[E] AMBIL PINYIN";
+                            actionPrompt.style.display = "block";
+                            return { type: "PICKUP", chest: c };
+                        }
+                    }
+                }
+            } else {
+                for (let b of targetBoards) {
+                    const dist = pandaGroup.position.distanceTo(b.group.position);
+                    if (dist < 2.5 && !b.userData.isCompleted) {
+                        actionPrompt.innerText = "[E] LETAK DI SINI";
+                        actionPrompt.style.display = "block";
+                        return { type: "MATCH", target: b };
+                    }
+                }
+            }
+            actionPrompt.style.display = "none";
+            return null;
+        }
+
+        function handleInteract() {
+            const action = checkInteractions();
+            if (!action) return;
+
+            if (action.type === "OPEN_CHEST") {
+                const c = action.chest;
+                c.userData.isOpen = true;
+                c.lidGroup.rotation.x = -Math.PI / 1.8;
+            }
+            else if (action.type === "PICKUP") {
+                const c = action.chest;
+                hasCard = true;
+                c.userData.isTaken = true;
+                c.cardMesh.visible = false;
+                currentCarriedWord = c.userData.wordData;
+
+                carriedCardMesh.material[4] = new THREE.MeshBasicMaterial({ map: createTextTexture(currentCarriedWord.pinyin) });
+                carriedCardMesh.visible = true;
+
+                playAudio(currentCarriedWord.pinyin);
+                document.getElementById('quest-title').innerText = `Bawa [ ${currentCarriedWord.pinyin} ] ke gambar!`;
+            }
+            else if (action.type === "MATCH") {
+                const b = action.target;
+                if (b.userData.wordData.pinyin === currentCarriedWord.pinyin) {
+                    stars += 1; xp += 10;
+                    completedInLevel += 1;
+                    document.getElementById('star-count').innerText = stars;
+                    document.getElementById('xp-count').innerText = xp;
+
+                    b.userData.isCompleted = true;
+                    b.boardMesh.material[4] = new THREE.MeshBasicMaterial({ map: createEmojiTexture(b.userData.wordData.emoji, true) });
+
+                    document.getElementById('success-emoji').innerText = currentCarriedWord.emoji;
+                    document.getElementById('success-pinyin').innerText = currentCarriedWord.pinyin;
+                    document.getElementById('success-meaning').innerHTML = `bermaksud **${currentCarriedWord.meaning}**`;
+                    document.getElementById('modal-success').style.display = "flex";
+                    playAudio(currentCarriedWord.pinyin);
+                } else {
+                    document.getElementById('wrong-text').innerHTML = `Ini gambar <b>${b.userData.wordData.meaning}</b>.<br>Cari gambar <b>${currentCarriedWord.meaning} (${currentCarriedWord.pinyin})</b>!`;
+                    document.getElementById('modal-wrong').style.display = "flex";
+                }
+            }
+        }
+
+        btnInteract.addEventListener('click', handleInteract);
+        window.addEventListener('keydown', e => { if (e.key.toLowerCase() === 'e' || e.key === ' ') handleInteract(); });
+
+        // FUNGSI AUDIO: MENUKAR PINYIN KEPADA HANZI BAGI MEMASTIKAN SEBUTAN MANDARIN ASLI
+        function playAudio(pinyinText) {
+            const textToSpeak = pinyinText || (currentCarriedWord ? currentCarriedWord.pinyin : "");
+            
+            // Cari Hanzi asal untuk pinyin ini supaya tak eja huruf demi huruf
+            let targetHanzi = textToSpeak;
+            for (let lvl of gameLevels) {
+                const found = lvl.words.find(w => w.pinyin === textToSpeak);
+                if (found) {
+                    targetHanzi = found.hanzi;
+                    break;
+                }
+            }
+
+            const msg = new SpeechSynthesisUtterance(targetHanzi);
+            msg.lang = 'zh-CN';
+            msg.rate = 0.85; // Kelajuan sebutan sederhana
+            window.speechSynthesis.speak(msg);
+        }
+
+        function closeSuccessModal() {
+            document.getElementById('modal-success').style.display = "none";
+            hasCard = false;
+            carriedCardMesh.visible = false;
+
+            if (completedInLevel >= 4) {
+                currentLevelIdx++;
+                if (currentLevelIdx < gameLevels.length) {
+                    alert(`🎉 SYABAS! KAMU DAH SELESAIKAN ${gameLevels[currentLevelIdx-1].category}!\nBersedia untuk Level Seterusnya!`);
+                    loadLevel(currentLevelIdx);
+                } else {
+                    alert("🏆 TAHNIAH PANDA! KAMU DAH SELESAIKAN SEMUA 6 LEVEL!");
+                    location.reload();
+                }
+            } else {
+                document.getElementById('quest-title').innerText = `Buka peti untuk ambil pinyin!`;
+            }
+        }
+
+        function closeWrongModal() {
+            document.getElementById('modal-wrong').style.display = "none";
+        }
+
+        // MINIMAP
+        const mapCanvas = document.getElementById('minimap-canvas');
+        const mapCtx = mapCanvas.getContext('2d');
+
+        function updateMinimap() {
+            mapCtx.clearRect(0, 0, 110, 110);
+            mapCtx.fillStyle = "#E0E0E0"; mapCtx.fillRect(0, 0, 110, 110);
+
+            const scale = 110 / 60; const offsetX = 55; const offsetY = 55;
+
+            mapCtx.fillStyle = "#000";
+            mapCtx.beginPath();
+            mapCtx.arc(pandaGroup.position.x * scale + offsetX, pandaGroup.position.z * scale + offsetY, 5, 0, Math.PI * 2);
+            mapCtx.fill();
+
+            chests.forEach(c => {
+                mapCtx.fillStyle = c.userData.isOpen ? "#FF9800" : "#795548";
+                mapCtx.fillRect(c.group.position.x * scale + offsetX - 3, c.group.position.z * scale + offsetY - 3, 6, 6);
+            });
+
+            targetBoards.forEach(b => {
+                mapCtx.fillStyle = b.userData.isCompleted ? "#4CAF50" : "#FF5252";
+                mapCtx.fillRect(b.group.position.x * scale + offsetX - 3, b.group.position.z * scale + offsetY - 3, 6, 6);
+            });
+        }
+
+        // GAME LOOP
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            let dx = 0; let dz = 0;
+            if (keys['w'] || keys['arrowup']) dz -= 1;
+            if (keys['s'] || keys['arrowdown']) dz += 1;
+            if (keys['a'] || keys['arrowleft']) dx -= 1;
+            if (keys['d'] || keys['arrowright']) dx += 1;
+
+            if (moveVector.x !== 0 || moveVector.z !== 0) { dx = moveVector.x; dz = moveVector.z; }
+
+            if (dx !== 0 || dz !== 0) {
+                const speed = 0.15;
+                pandaGroup.position.x += dx * speed;
+                pandaGroup.position.z += dz * speed;
+
+                const angle = Math.atan2(dx, dz);
+                pandaGroup.rotation.y = angle;
+                pandaGroup.rotation.z = Math.sin(clock.getElapsedTime() * 10) * 0.05;
+            } else {
+                pandaGroup.rotation.z = 0;
+            }
+
+            camera.position.set(pandaGroup.position.x, pandaGroup.position.y + 8, pandaGroup.position.z + 10);
+            camera.lookAt(pandaGroup.position);
+
+            checkInteractions();
+            updateMinimap();
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
